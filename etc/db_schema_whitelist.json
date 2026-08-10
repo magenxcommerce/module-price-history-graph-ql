@@ -1,0 +1,20 @@
+{
+    "magenx_price_history": {
+        "column": {
+            "history_id": true,
+            "product_id": true,
+            "website_id": true,
+            "customer_group_id": true,
+            "price": true,
+            "captured_on": true
+        },
+        "index": {
+            "MAGENX_PRICE_HISTORY_SCOPE_PRODUCT_DAY": true,
+            "MAGENX_PRICE_HISTORY_CAPTURED_ON": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "MAGENX_PRICE_HISTORY_PRODUCT_WEBSITE_GROUP_DAY": true
+        }
+    }
+}

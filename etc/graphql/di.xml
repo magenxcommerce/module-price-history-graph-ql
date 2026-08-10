@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © Magenx. All rights reserved.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Expose the prior-price enable flag on the storeConfig GraphQL query so the
+         storefront can gate the feature without a second round trip. The window
+         length is already returned per product on price_history.days. -->
+    <type name="Magento\StoreGraphQl\Model\Resolver\Store\StoreConfigDataProvider">
+        <arguments>
+            <argument name="extendedConfigData" xsi:type="array">
+                <item name="price_history_enabled" xsi:type="string">magenx_price_history/general/enabled</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

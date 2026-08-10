@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © Magenx. All rights reserved.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="magenx" translate="label" sortOrder="400">
+            <label>Magenx</label>
+        </tab>
+        <section id="magenx_price_history" translate="label" sortOrder="415" showInDefault="1" showInWebsite="1" showInStore="1">
+            <class>separator-top</class>
+            <label>Price History (EU Omnibus)</label>
+            <tab>magenx</tab>
+            <resource>Magenx_PriceHistoryGraphQl::config</resource>
+            <group id="general" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>General</label>
+                <comment><![CDATA[Records a daily snapshot of each product's price and exposes the lowest price over the look-back window as the EU Omnibus "prior price" (the lowest price applied during at least the 30 days before a reduction, which must be shown whenever a reduction is announced). Needs the <code>magenx_price_history_snapshot</code> cron running; the window fills in over the first N days. When disabled the <code>price_history</code> product field resolves to null and the storefront shows no prior-price line.]]></comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Prior-Price Tracking</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="window_days" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Look-back Window (days)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                    <comment>The prior price is the lowest price over this many days. EU Omnibus requires at least 30.</comment>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+            <group id="cron" translate="label" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Cron</label>
+                <field id="schedule" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Snapshot Schedule (cron expression)</label>
+                    <comment>When the daily price snapshot runs. Default "0 3 * * *". Schedule it after the product price reindex so it captures the day's real prices.</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

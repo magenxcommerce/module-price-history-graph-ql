@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © Magenx. All rights reserved.
+ */
+-->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <!-- EU Omnibus prior-price daily snapshots: one row per (product, website,
+         customer group, calendar day) holding the lowest final price observed
+         that day. The daily SnapshotPrices cron upserts into it; the batch
+         resolver reads MIN(price) over the look-back window. -->
+    <table name="magenx_price_history" resource="default" engine="innodb"
+           comment="EU Omnibus prior-price daily snapshots (lowest final price per product/scope/day)">
+        <column xsi:type="int" name="history_id" unsigned="true" nullable="false" identity="true"
+                comment="History ID"/>
+        <column xsi:type="int" name="product_id" unsigned="true" nullable="false"
+                comment="Product entity ID"/>
+        <column xsi:type="smallint" name="website_id" unsigned="true" nullable="false" default="0"
+                comment="Website ID"/>
+        <column xsi:type="int" name="customer_group_id" unsigned="true" nullable="false" default="0"
+                comment="Customer group ID"/>
+        <column xsi:type="decimal" name="price" scale="4" precision="20" nullable="false" default="0"
+                comment="Lowest final price captured for this scope on captured_on (website base currency)"/>
+        <column xsi:type="date" name="captured_on" nullable="false"
+                comment="Calendar day of the snapshot"/>
+
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="history_id"/>
+        </constraint>
+
+        <!-- Upsert target: one row per product+scope+day. Lets the cron use
+             ON DUPLICATE KEY UPDATE so same-day re-runs collapse into one row. -->
+        <constraint xsi:type="unique" referenceId="MAGENX_PRICE_HISTORY_PRODUCT_WEBSITE_GROUP_DAY">
+            <column name="product_id"/>
+            <column name="website_id"/>
+            <column name="customer_group_id"/>
+            <column name="captured_on"/>
+        </constraint>
+
+        <!-- Read path: WHERE website_id=? AND customer_group_id=? AND product_id IN(...)
+             AND captured_on >= cutoff GROUP BY product_id. Equality columns first,
+             then the IN set, then the range, price last => a covering index that
+             resolves MIN(price) GROUP BY product_id from the index alone. -->
+        <index referenceId="MAGENX_PRICE_HISTORY_SCOPE_PRODUCT_DAY" indexType="btree">
+            <column name="website_id"/>
+            <column name="customer_group_id"/>
+            <column name="product_id"/>
+            <column name="captured_on"/>
+            <column name="price"/>
+        </index>
+
+        <!-- Prune path: DELETE WHERE captured_on < cutoff. -->
+        <index referenceId="MAGENX_PRICE_HISTORY_CAPTURED_ON" indexType="btree">
+            <column name="captured_on"/>
+        </index>
+    </table>
+</schema>

@@ -1,0 +1,96 @@
+# Magenx_PriceHistoryGraphQl
+
+Tracks a rolling **price history** per product and exposes the lowest price over
+a configurable look-back window (default **30 days**) over GraphQL. This is the
+**EU Omnibus Directive** (Art. 6a of Directive 98/6/EC) *prior price*: the lowest
+price applied during at least the 30 days before a price reduction, which a
+trader **must display** whenever a reduction is announced.
+
+Stock Magento only exposes point-in-time prices, so nothing records what a
+product cost in the past. This module adds that record and surfaces it, without
+touching any core module (the same companion-module split as `DealGraphQl` /
+`BestSellerGraphQl`).
+
+## How it works
+
+- **Daily snapshot cron** `magenx_price_history_snapshot`
+  (`Cron/SnapshotPrices.php`) copies each product's current price from
+  the native price index `catalog_product_index_price` into
+  `magenx_price_history`, one row per **(product, website, customer group, day)**.
+  - It captures `IF(final_price > 0, final_price, min_price)`:
+    - **Simple products** → `final_price` (post special-price + catalog-rule),
+      the authoritative single-unit selling price — **not** `min_price` (which
+      would fold in tier / quantity-break prices).
+    - **Composite parents** (configurable / bundle / grouped) have
+      `final_price = 0` in the index — the parent carries no own price and the
+      storefront shows `min_price` (the cheapest child's "from" price). Capturing
+      `final_price` there stored **€0.00**, so the Omnibus disclosure rendered
+      "Lowest price in the last 30 days: €0.00". These now capture `min_price`,
+      matching the displayed figure. A selected variant still gets its own
+      precise history (children are simple products with their own index rows).
+    - Genuinely free products (both `0`) are skipped rather than storing a `0`.
+  - All `(website, customer_group)` rows are captured, because groups can be
+    shown different prices and the prior price must match what *that* customer
+    saw.
+  - Re-runs on the same day keep the **lowest** value seen
+    (`ON DUPLICATE KEY UPDATE price = LEAST(...)`), so an intraday markdown isn't
+    lost.
+  - Rows older than `window_days + 10` are pruned (batched).
+- **`ProductInterface.price_history`** is a **batch resolver** — a whole grid's
+  products are resolved with **one** `MIN(price) ... GROUP BY product_id` query,
+  so the field is safe on listing grids (category / search / carousels), not just
+  the PDP. It returns `{ lowest_price, currency, days, since }` in the store's
+  display currency, or `null` when disabled or no history exists. The `MIN`
+  ignores non-positive rows (`price > 0`), so a legacy `€0.00` snapshot (a
+  configurable parent captured before the `min_price` fix) can't drag the result
+  to `€0.00` — such a product resolves to `null` until real prices accumulate.
+  The field is also selected on each configurable **variant** product, so
+  choosing a swatch on the PDP updates the prior-price disclosure to that
+  specific child's history.
+- **`StoreConfig.price_history_enabled`** mirrors the admin toggle.
+
+```graphql
+{
+  products(filter: { sku: { eq: "24-MB01" } }) {
+    items {
+      price_history { lowest_price currency days since }
+    }
+  }
+}
+```
+
+## Configuration
+
+Stores → Configuration → Catalog → **Price History (EU Omnibus)**
+(`magenx_price_history/...`):
+
+- **Enable Prior-Price Tracking** (`general/enabled`, default **off**).
+- **Look-back Window (days)** (`general/window_days`, default **30** — the EU
+  minimum).
+- **Snapshot Schedule** (`cron/schedule`, default `0 3 * * *`).
+
+## Operational notes
+
+- **Warm-up.** The window fills in over the first N days the cron runs — a fresh
+  install has no history, and the lowest price is only the minimum of what has
+  been captured so far. Enable the module and let the cron run.
+- **Run after the price reindex.** The snapshot is only as fresh as the last
+  product-price reindex. If the price indexer runs on schedule, keep the snapshot
+  cron (default 03:00) after the indexer's window.
+- **Indexer Dimensions mode.** When the product-price indexer is dimension-based,
+  Magento refreshes the base `catalog_product_index_price` only on full reindex;
+  the cron reads that base table intentionally, so ensure it is populated.
+- **Table growth.** ≈ `products × websites × customer_groups × (window_days + 10)`
+  rows; the prune keeps it flat. Size the DB accordingly.
+- **Timezone.** The snapshot day and the resolver's look-back cutoff use the same
+  `TimezoneInterface`, so the 30-day window is exact at day boundaries.
+
+## Verification
+
+```bash
+php -l Cron/SnapshotPrices.php   # (and the other Model/*.php)
+bin/magento setup:upgrade        # creates magenx_price_history + unique key + indexes
+bin/magento cron:run --group=default
+# then query price_history over GraphQL and confirm a 24-item grid issues a
+# single MIN(...) GROUP BY product_id query (no per-card fan-out).
+```

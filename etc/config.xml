@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © Magenx. All rights reserved.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <magenx_price_history>
+            <general>
+                <!-- Off by default: EU Omnibus prior-price display is opt-in per
+                     catalog, and the history table needs the cron to warm up
+                     before it is meaningful. -->
+                <enabled>0</enabled>
+                <window_days>30</window_days>
+            </general>
+            <cron>
+                <schedule>0 3 * * *</schedule>
+            </cron>
+        </magenx_price_history>
+    </default>
+</config>

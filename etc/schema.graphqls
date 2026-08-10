@@ -1,0 +1,18 @@
+# Copyright © Magenx. All rights reserved.
+
+interface ProductInterface {
+    price_history: PriceHistory
+        @resolver(class: "Magenx\\PriceHistoryGraphQl\\Model\\Resolver\\Product\\PriceHistory")
+        @doc(description: "EU Omnibus prior price: the lowest price applied to this product over the configured look-back window (default 30 days), for the request's website + customer group. Null when the feature is disabled or no history has been captured yet. Resolved in a single batched query per request, so it is safe on listing grids.")
+}
+
+type PriceHistory @doc(description: "EU Omnibus (Art. 6a of Directive 98/6/EC) prior-price information: the lowest price applied over the look-back window, which must be shown alongside any announced price reduction.") {
+    lowest_price: Float @doc(description: "The lowest price applied during the look-back window, in the store's display currency.")
+    currency: String @doc(description: "Currency code of lowest_price.")
+    days: Int @doc(description: "Length of the look-back window in days.")
+    since: String @doc(description: "ISO-8601 date (YYYY-MM-DD) the window starts, i.e. today minus days.")
+}
+
+type StoreConfig {
+    price_history_enabled: Boolean @doc(description: "Whether EU Omnibus prior-price tracking is enabled for the store.")
+}

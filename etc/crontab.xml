@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Copyright © Magenx. All rights reserved.
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
+    <group id="default">
+        <job name="magenx_price_history_snapshot"
+             instance="Magenx\PriceHistoryGraphQl\Cron\SnapshotPrices" method="execute">
+            <config_path>magenx_price_history/cron/schedule</config_path>
+        </job>
+    </group>
+</config>
