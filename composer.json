@@ -1,5 +1,5 @@
 {
-    "name": "magenx/module-price-history-graph-ql",
+    "name": "magenxcommerce/module-price-history-graph-ql",
     "description": "Tracks a rolling daily snapshot of each product's final price and exposes the lowest price over a configurable look-back window (default 30 days) over GraphQL as `ProductInterface.price_history`, plus a `price_history_enabled` store-config flag. This is the EU Omnibus Directive (Art. 6a of Directive 98/6/EC) \"prior price\" — the lowest price applied during at least the 30 days before a price reduction, which must be shown whenever a reduction is announced. A daily cron snapshots the native price index; the per-product field is a batch resolver, so it is safe on listing grids.",
     "config": {
         "sort-packages": true
