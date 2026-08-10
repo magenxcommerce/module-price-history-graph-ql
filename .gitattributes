@@ -1,0 +1,5 @@
+# Keep development-only files out of the distributed magento2-module package.
+/.github        export-ignore
+/.gitattributes export-ignore
+/.gitignore     export-ignore
+/phpcs.xml.dist export-ignore

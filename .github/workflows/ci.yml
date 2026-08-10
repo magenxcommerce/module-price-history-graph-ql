@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['.github/**']
+  pull_request:
+    paths-ignore: ['.github/**']
+  # paths-ignore means a workflow-only change never triggers a run, so keep a
+  # manual handle for verifying changes to the shared workflow.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    # Release PRs only carry CHANGELOG.md and composer.json reserialization.
+    # A skipped job still reports a conclusion, so this stays compatible with
+    # required status checks in a way that a trigger-level filter would not.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    uses: magenxcommerce/workflows/.github/workflows/php-module-ci.yml@main

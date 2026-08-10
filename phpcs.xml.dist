@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<ruleset name="Magenx_Helpdesk">
+    <description>Magento 2 coding standard for Magenx_Helpdesk.</description>
+
+    <arg name="extensions" value="php,phtml,xml,js"/>
+    <arg name="severity" value="8"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <!--
+        Scan the whole module rather than naming directories, so this file is
+        identical across every magenxcommerce/module-* repo. PSR-4 maps the
+        module namespace to the repo root, so the excludes below are what keeps
+        tooling and dependencies out.
+    -->
+    <file>.</file>
+
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/.git/*</exclude-pattern>
+    <exclude-pattern>*/.github/*</exclude-pattern>
+
+    <rule ref="Magento2"/>
+</ruleset>
