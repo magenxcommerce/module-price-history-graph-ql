@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/magenxcommerce/module-price-history-graph-ql/compare/v1.0.0...v1.0.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* Batch snapshot processing and scope-aware timezone handling ([#5](https://github.com/magenxcommerce/module-price-history-graph-ql/issues/5)) ([343b18b](https://github.com/magenxcommerce/module-price-history-graph-ql/commit/343b18bec51d88e090d5af438d38ed38631fde07))
+* correct retention scoping, timezone anchoring and request caching ([343b18b](https://github.com/magenxcommerce/module-price-history-graph-ql/commit/343b18bec51d88e090d5af438d38ed38631fde07))
+
 ## 1.0.0 (2026-08-11)
 
 
