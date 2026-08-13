@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<ruleset name="Magenx_Helpdesk">
-    <description>Magento 2 coding standard for Magenx_Helpdesk.</description>
+<ruleset name="Magenx_PriceHistoryGraphQl">
+    <description>Magento 2 coding standard for Magenx_PriceHistoryGraphQl.</description>
 
     <arg name="extensions" value="php,phtml,xml,js"/>
     <arg name="severity" value="8"/>

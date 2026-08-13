@@ -20,6 +20,8 @@ touching any core module (the same companion-module split as `DealGraphQl` /
   (`Cron/SnapshotPrices.php`) copies each product's current price from
   the native price index `catalog_product_index_price` into
   `magenx_price_history`, one row per **(product, website, customer group, day)**.
+  The copy is walked in `entity_id` batches rather than one statement, so a large
+  catalog doesn't turn the nightly run into a single long transaction.
   - It captures `IF(final_price > 0, final_price, min_price)`:
     - **Simple products** → `final_price` (post special-price + catalog-rule),
       the authoritative single-unit selling price — **not** `min_price` (which
@@ -38,7 +40,12 @@ touching any core module (the same companion-module split as `DealGraphQl` /
   - Re-runs on the same day keep the **lowest** value seen
     (`ON DUPLICATE KEY UPDATE price = LEAST(...)`), so an intraday markdown isn't
     lost.
-  - Rows older than `window_days + 10` are pruned (batched).
+  - The snapshot is skipped entirely while the feature is disabled in **every**
+    scope, so a default install never accumulates rows nothing reads. Pruning
+    still runs, so an existing table drains after the feature is switched off.
+  - Rows older than `window_days + 10` are pruned (batched), where `window_days`
+    is the **longest** window configured in any scope — a store on a 90-day
+    window keeps 100 days of history even if the default scope is still 30.
 - **`ProductInterface.price_history`** is a **batch resolver** — a whole grid's
   products are resolved with **one** `MIN(price) ... GROUP BY product_id` query,
   so the field is safe on listing grids (category / search / carousels), not just
@@ -64,7 +71,7 @@ touching any core module (the same companion-module split as `DealGraphQl` /
 
 ## Configuration
 
-Stores → Configuration → Catalog → **Price History (EU Omnibus)**
+Stores → Configuration → Magenx → **Price History (EU Omnibus)**
 (`magenx_price_history/...`):
 
 - **Enable Prior-Price Tracking** (`general/enabled`, default **off**).
@@ -85,8 +92,11 @@ Stores → Configuration → Catalog → **Price History (EU Omnibus)**
   the cron reads that base table intentionally, so ensure it is populated.
 - **Table growth.** ≈ `products × websites × customer_groups × (window_days + 10)`
   rows; the prune keeps it flat. Size the DB accordingly.
-- **Timezone.** The snapshot day and the resolver's look-back cutoff use the same
-  `TimezoneInterface`, so the 30-day window is exact at day boundaries.
+- **Timezone.** The snapshot day and the resolver's look-back cutoff are both
+  anchored to the **default scope's** timezone (`scopeDate(0)`), so the 30-day
+  window is exact at day boundaries. Anchoring matters because cron runs in the
+  admin scope while the resolver runs in a store scope, and store views may each
+  carry a different `general/locale/timezone`.
 
 ## Verification
 

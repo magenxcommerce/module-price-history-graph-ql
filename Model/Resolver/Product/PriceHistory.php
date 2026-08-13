@@ -15,7 +15,9 @@ use Magento\Framework\GraphQl\Query\Resolver\BatchRequestItemInterface;
 use Magento\Framework\GraphQl\Query\Resolver\BatchResolverInterface;
 use Magento\Framework\GraphQl\Query\Resolver\BatchResponse;
 use Magento\Framework\GraphQl\Query\Resolver\ContextInterface;
+use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Framework\Stdlib\DateTime\TimezoneInterface;
+use Magento\Store\Model\Store;
 
 /**
  * Resolves ProductInterface.price_history — the EU Omnibus prior price (the
@@ -40,12 +42,14 @@ class PriceHistory implements BatchResolverInterface
      * @param PriceHistoryProvider $provider
      * @param CustomerContext $customerContext
      * @param TimezoneInterface $timezone
+     * @param PriceCurrencyInterface $priceCurrency
      */
     public function __construct(
         private readonly Config $config,
         private readonly PriceHistoryProvider $provider,
         private readonly CustomerContext $customerContext,
-        private readonly TimezoneInterface $timezone
+        private readonly TimezoneInterface $timezone,
+        private readonly PriceCurrencyInterface $priceCurrency
     ) {
     }
 
@@ -59,23 +63,37 @@ class PriceHistory implements BatchResolverInterface
     {
         $response = new BatchResponse();
 
-        $store = $context->getExtensionAttributes()->getStore();
-        $storeId = (int) $store->getId();
-        $enabled = $this->config->isEnabled($storeId);
-        $windowDays = $this->config->getWindowDays($storeId);
-        $cutoff = $this->timezone->date()->modify('-' . $windowDays . ' days')->format('Y-m-d');
-        [$currencyCode, $currencyRate] = $this->currency($store);
+        $store = $context->getExtensionAttributes()?->getStore();
+        $storeId = $store !== null ? (int) $store->getId() : null;
 
-        // Gather every product id in this batch (one grid / query branch).
-        $ids = [];
-        foreach ($requests as $request) {
-            $product = $this->productOf($request);
-            if ($product !== null) {
-                $ids[] = (int) $product->getId();
+        // No store on the context, or the feature is off: every product resolves
+        // to null rather than failing the product query.
+        if ($store === null || !$this->config->isEnabled($storeId)) {
+            foreach ($requests as $request) {
+                $response->addResponse($request, null);
             }
+
+            return $response;
         }
 
-        $lowest = ($enabled && $ids)
+        $windowDays = $this->config->getWindowDays($storeId);
+        // Anchored to the default scope, the same scope the snapshot cron runs
+        // in, so `captured_on` and this cutoff mean the same calendar day even
+        // when store views carry different timezones.
+        $cutoff = $this->timezone->scopeDate(Store::DEFAULT_STORE_ID)
+            ->modify('-' . $windowDays . ' days')
+            ->format('Y-m-d');
+
+        // Gather every product id in this batch (one grid / query branch),
+        // keyed by request so the second pass never re-derives the model.
+        $productIds = [];
+        foreach ($requests as $key => $request) {
+            $product = $this->productOf($request);
+            $productIds[$key] = $product !== null ? (int) $product->getId() : 0;
+        }
+
+        $ids = array_filter($productIds);
+        $lowest = $ids
             ? $this->provider->getLowest(
                 (int) $store->getWebsiteId(),
                 $this->customerContext->getGroupId($context),
@@ -84,19 +102,33 @@ class PriceHistory implements BatchResolverInterface
             )
             : [];
 
-        foreach ($requests as $request) {
-            $product = $this->productOf($request);
-            $productId = $product !== null ? (int) $product->getId() : 0;
+        try {
+            $currency = $this->priceCurrency->getCurrency($storeId)->getCurrencyCode();
+        } catch (\Exception $e) {
+            // Currency framework unavailable: report the stored base-currency
+            // figure unconverted rather than failing the whole product query.
+            $currency = null;
+        }
 
-            if (!$enabled || !isset($lowest[$productId])) {
-                // Disabled or no captured history for this product => null.
+        foreach ($requests as $key => $request) {
+            $productId = $productIds[$key];
+
+            if (!isset($lowest[$productId])) {
+                // No captured history for this product => null.
                 $response->addResponse($request, null);
                 continue;
             }
 
             $response->addResponse($request, [
-                'lowest_price' => round($lowest[$productId] * $currencyRate, 2),
-                'currency' => $currencyCode,
+                // Snapshots are stored in the website base currency;
+                // convertAndRound applies the store's current rate and Magento's
+                // standard price precision, so the prior price matches the figure
+                // the shopper sees. A null currency means that framework was
+                // unavailable above, so the base figure is reported as-is.
+                'lowest_price' => $currency !== null
+                    ? $this->priceCurrency->convertAndRound($lowest[$productId], $storeId)
+                    : round($lowest[$productId], 2),
+                'currency' => $currency,
                 'days' => $windowDays,
                 'since' => $cutoff,
             ]);
@@ -118,29 +150,5 @@ class PriceHistory implements BatchResolverInterface
         return isset($value['model']) && $value['model'] instanceof ProductInterface
             ? $value['model']
             : null;
-    }
-
-    /**
-     * The store's display currency code and the base->display rate.
-     *
-     * Snapshots are stored in the website base currency; multiplying by the rate
-     * makes the prior price match the figure the shopper sees. Falls back to
-     * (base code, 1.0) if the currency framework is unavailable.
-     *
-     * @param \Magento\Store\Api\Data\StoreInterface $store
-     * @return array{0: string|null, 1: float}
-     */
-    private function currency($store): array
-    {
-        try {
-            $rate = (float) $store->getCurrentCurrencyRate();
-            return [$store->getCurrentCurrencyCode(), $rate > 0 ? $rate : 1.0];
-        } catch (\Exception $e) {
-            try {
-                return [$store->getBaseCurrencyCode(), 1.0];
-            } catch (\Exception $inner) {
-                return [null, 1.0];
-            }
-        }
     }
 }
