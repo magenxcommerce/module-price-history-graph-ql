@@ -7,6 +7,7 @@ declare(strict_types=1);
 namespace Magenx\PriceHistoryGraphQl\Model;
 
 use Magento\Framework\App\ResourceConnection;
+use Psr\Log\LoggerInterface;
 
 /**
  * Reads the lowest captured price per product over a look-back window from the
@@ -16,19 +17,25 @@ use Magento\Framework\App\ResourceConnection;
  * ONE indexed `MIN(price) ... GROUP BY product_id` query, and results are
  * memoized per (website, group, cutoff) for the request. So a 24-card grid pays
  * a single query, not one per card — unlike a per-product EAV/price fan-out.
- * The history table is unbounded (products x groups x retained days), so this
- * deliberately does NOT preload the whole scope the way DealProvider does.
+ *
+ * Every read is bounded to the ids actually being rendered: the history table is
+ * unbounded (products x groups x retained days), so no part of it is ever
+ * preloaded wholesale. Misses are cached alongside hits, so a page that resolves
+ * several product branches (grid + related + upsell) never re-queries the same
+ * id twice.
  */
 class PriceHistoryProvider
 {
-    /** @var array<string, array<int, float>> "websiteId:groupId:cutoff" => productId => lowest */
+    /** @var array<string, array<int, float|null>> "websiteId:groupId:cutoff" => productId => lowest|null */
     private array $cache = [];
 
     /**
      * @param ResourceConnection $resource
+     * @param LoggerInterface $logger
      */
     public function __construct(
-        private readonly ResourceConnection $resource
+        private readonly ResourceConnection $resource,
+        private readonly LoggerInterface $logger
     ) {
     }
 
@@ -49,10 +56,17 @@ class PriceHistoryProvider
         }
 
         $key = $websiteId . ':' . $groupId . ':' . $cutoff;
-        $known = $this->cache[$key] ?? [];
+        $this->cache[$key] ??= [];
 
-        $missing = array_values(array_diff($productIds, array_keys($known)));
+        $missing = array_values(array_diff($productIds, array_keys($this->cache[$key])));
         if ($missing) {
+            // Negative-cache up front; the query below fills in the hits. Without
+            // this an id with no history would fall into $missing on every call
+            // and re-issue the same query for the rest of the request.
+            foreach ($missing as $productId) {
+                $this->cache[$key][$productId] = null;
+            }
+
             try {
                 $connection = $this->resource->getConnection();
                 $select = $connection->select()
@@ -73,15 +87,32 @@ class PriceHistoryProvider
                     ->group('h.product_id');
 
                 foreach ($connection->fetchAll($select) as $row) {
-                    $known[(int) $row['product_id']] = (float) $row['lowest'];
+                    $this->cache[$key][(int) $row['product_id']] = (float) $row['lowest'];
                 }
             } catch (\Exception $e) {
                 // Table absent / cron never ran — return no history rather than
                 // letting a product query error.
+                $this->logDegraded($e);
             }
-            $this->cache[$key] = $known;
         }
 
-        return array_intersect_key($known, array_flip($productIds));
+        return array_filter(
+            array_intersect_key($this->cache[$key], array_flip($productIds)),
+            static fn (?float $lowest): bool => $lowest !== null
+        );
+    }
+
+    /**
+     * Record why the lookup degraded to "no history". Silence here used to hide a
+     * missing schema upgrade behind a permanently empty prior-price disclosure.
+     *
+     * @param \Exception $e
+     * @return void
+     */
+    private function logDegraded(\Exception $e): void
+    {
+        $this->logger->warning(
+            'Magenx_PriceHistoryGraphQl: price history unavailable, resolving to no history. ' . $e->getMessage()
+        );
     }
 }
