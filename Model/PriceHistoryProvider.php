@@ -7,6 +7,7 @@ declare(strict_types=1);
 namespace Magenx\PriceHistoryGraphQl\Model;
 
 use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\ObjectManager\ResetAfterRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -24,7 +25,7 @@ use Psr\Log\LoggerInterface;
  * several product branches (grid + related + upsell) never re-queries the same
  * id twice.
  */
-class PriceHistoryProvider
+class PriceHistoryProvider implements ResetAfterRequestInterface
 {
     /** @var array<string, array<int, float|null>> "websiteId:groupId:cutoff" => productId => lowest|null */
     private array $cache = [];
@@ -37,6 +38,14 @@ class PriceHistoryProvider
         private readonly ResourceConnection $resource,
         private readonly LoggerInterface $logger
     ) {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function _resetState(): void
+    {
+        $this->cache = [];
     }
 
     /**
