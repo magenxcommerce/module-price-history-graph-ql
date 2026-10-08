@@ -9,6 +9,7 @@ namespace Magenx\PriceHistoryGraphQl\Model;
 use Magento\Customer\Api\CustomerRepositoryInterface;
 use Magento\Customer\Api\Data\GroupInterface;
 use Magento\Framework\GraphQl\Query\Resolver\ContextInterface;
+use Magento\Framework\ObjectManager\ResetAfterRequestInterface;
 
 /**
  * Resolves the customer group id for the current GraphQL request.
@@ -18,7 +19,7 @@ use Magento\Framework\GraphQl\Query\Resolver\ContextInterface;
  * storefront prices were shown for: the logged-in customer's group, or
  * NOT_LOGGED_IN (0) for guests. Cached per request.
  */
-class CustomerContext
+class CustomerContext implements ResetAfterRequestInterface
 {
     /** @var array<int, int> customer id => group id */
     private array $groupCache = [];
@@ -29,6 +30,14 @@ class CustomerContext
     public function __construct(
         private readonly CustomerRepositoryInterface $customerRepository
     ) {
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function _resetState(): void
+    {
+        $this->groupCache = [];
     }
 
     /**
