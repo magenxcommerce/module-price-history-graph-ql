@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/magenxcommerce/module-price-history-graph-ql/compare/v1.0.1...v1.0.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* reset request-scoped price-history caches for long-lived application servers ([#8](https://github.com/magenxcommerce/module-price-history-graph-ql/issues/8)) ([5113468](https://github.com/magenxcommerce/module-price-history-graph-ql/commit/5113468e99a84b85999e8716d7d2b0eca88ec06a))
+
 ## [1.0.1](https://github.com/magenxcommerce/module-price-history-graph-ql/compare/v1.0.0...v1.0.1) (2026-08-13)
 
 
